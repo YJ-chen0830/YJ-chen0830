@@ -9,9 +9,7 @@
     }
   },
   "enabledPlugins": [
-    "market-data@financial-services-plugins",
-    "financial-calculator@financial-services-plugins",
-    "portfolio-analyzer@financial-services-plugins",
-    "risk-assessment@financial-services-plugins"
+    "financial-analysis@financial-services-plugins",
+    "equity-research@financial-services-plugins"
   ]
 }
