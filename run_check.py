@@ -17,7 +17,7 @@ from __future__ import annotations
 from steel_lrfd import (
     get_section, list_sections,
     Material, ColumnParams, BeamParams, AppliedForces,
-    BeamColumnLRFD,
+    BeamColumnLRFD, plot_pm_diagram,
 )
 from steel_lrfd.reporter import print_member_summary, print_load_cases
 
@@ -36,6 +36,8 @@ def run_design_check(
     *,
     Fu: float = 65.0,
     E: float = 29000.0,
+    plot: bool = False,
+    save_path: str | None = "PM_interaction_diagram.png",
 ) -> None:
     """
     Run a full AISC LRFD beam-column check and print the report.
@@ -68,6 +70,9 @@ def run_design_check(
         for lbl, Pu, Mux, Muy in load_cases
     ]
     print_load_cases(bc, cases)
+
+    if plot:
+        plot_pm_diagram(bc, cases, save_path=save_path, show=True)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -134,6 +139,7 @@ def interactive_check() -> None:
         load_cases.append((lbl, Pu, Mux, Muy))
         idx += 1
 
+    do_plot = input("\n  繪製 P-M 互制圖？Plot P-M diagram? [Y/n]: ").strip().lower()
     run_design_check(
         section_name=sec_name,
         Fy=Fy, Fu=Fu, E=E,
@@ -141,6 +147,7 @@ def interactive_check() -> None:
         Ky=Ky, Ly_ft=Ly_ft,
         Lb_ft=Lb_ft, Cb=Cb,
         load_cases=load_cases,
+        plot=(do_plot != "n"),
     )
 
 
@@ -148,7 +155,7 @@ def interactive_check() -> None:
 # Preset example (run without interaction)
 # ─────────────────────────────────────────────────────────────────────────────
 
-def run_example() -> None:
+def run_example(plot: bool = True) -> None:
     """Demonstrate programmatic API with W14x82 example."""
     run_design_check(
         section_name = "W14x82",
@@ -163,6 +170,7 @@ def run_example() -> None:
             ("0.9D+1.0W",         -100,     316.7,        0.0),
             ("拉力組合",           +200,     166.7,        0.0),
         ],
+        plot=plot,
     )
 
 
@@ -172,7 +180,7 @@ if __name__ == "__main__":
     import sys
 
     if "--example" in sys.argv:
-        run_example()
+        run_example(plot="--no-plot" not in sys.argv)
     else:
         try:
             interactive_check()
