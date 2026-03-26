@@ -20,7 +20,7 @@ import matplotlib.patches as mpatches
 import matplotlib.ticker as ticker
 from matplotlib.lines import Line2D
 
-from .core import BeamColumnLRFD, AppliedForces, InteractionResult
+from .core import BeamColumnLRFD, AppliedForces, InteractionResult  # noqa: E402
 
 
 # ── CJK font auto-detection ─────────────────────────────────────────────────
@@ -291,8 +291,8 @@ def _finish_axes(ax, title, M_max, P_min, P_max, legend=True):
     ax.set_xlim(-pad_x * 0.2, M_max + pad_x)
     ax.set_ylim(P_min - pad_y, P_max + pad_y)
 
-    ax.set_xlabel("彎矩 Mu  (kip-ft)", fontsize=10)
-    ax.set_ylabel("軸力 Pu  (kips)\n← 壓力 C            拉力 T →", fontsize=10)
+    ax.set_xlabel("彎矩 Mu  (kN·m)", fontsize=10)
+    ax.set_ylabel("軸力 Pu  (kN)\n← 壓力 C            拉力 T →", fontsize=10)
     ax.set_title(title, fontsize=9.5, pad=8)
     ax.grid(True, alpha=0.25, lw=0.6)
     ax.xaxis.set_minor_locator(ticker.AutoMinorLocator())

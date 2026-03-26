@@ -1,13 +1,17 @@
 """
-AISC LRFD 鋼梁柱設計檢核程式
-Steel Beam-Column LRFD Check – interactive entry point
+AISC LRFD 鋼梁柱設計檢核程式（公制版）
+Steel Beam-Column LRFD Check – Metric Edition
 
 Usage
 -----
-直接執行本檔案，依提示輸入截面、幾何參數與外力組合：
+互動式輸入：
     python run_check.py
 
-或在其他腳本中直接呼叫：
+執行內建範例：
+    python run_check.py --example            (含 P-M 互制圖)
+    python run_check.py --example --no-plot  (純文字報表)
+
+程式呼叫：
     from run_check import run_design_check
     run_design_check(...)
 """
@@ -15,7 +19,7 @@ Usage
 from __future__ import annotations
 
 from steel_lrfd import (
-    get_section, list_sections,
+    get_section, list_sections, list_sections_by_category,
     Material, ColumnParams, BeamParams, AppliedForces,
     BeamColumnLRFD, plot_pm_diagram,
 )
@@ -29,13 +33,13 @@ from steel_lrfd.reporter import print_member_summary, print_load_cases
 def run_design_check(
     section_name: str,
     Fy: float,
-    Kx: float, Lx_ft: float,
-    Ky: float, Ly_ft: float,
-    Lb_ft: float, Cb: float,
+    Kx: float, Lx_m: float,
+    Ky: float, Ly_m: float,
+    Lb_m: float, Cb: float,
     load_cases: list[tuple[str, float, float, float]],
     *,
-    Fu: float = 65.0,
-    E: float = 29000.0,
+    Fu: float = 490.0,
+    E:  float = 200_000.0,
     plot: bool = False,
     save_path: str | None = "PM_interaction_diagram.png",
 ) -> None:
@@ -44,29 +48,24 @@ def run_design_check(
 
     Parameters
     ----------
-    section_name : str
-        W-section name, e.g. "W14x82"
-    Fy, Fu, E    : float
-        Steel material properties (ksi)
-    Kx, Lx_ft   : float
-        Effective length factor and unbraced length (ft), strong axis
-    Ky, Ly_ft   : float
-        Effective length factor and unbraced length (ft), weak axis
-    Lb_ft, Cb   : float
-        Unbraced length for LTB (ft) and Cb factor
-    load_cases   : list of (label, Pu_kips, Mux_kip_ft, Muy_kip_ft)
-        Pu > 0 = tension,  Pu < 0 = compression
+    section_name : str   e.g. "H300x300x10x15"
+    Fy, Fu, E    : float 材料強度 (MPa)
+    Kx, Lx_m    : float 強軸有效長度因子 K 與無側撐長度 (m)
+    Ky, Ly_m    : float 弱軸有效長度因子 K 與無側撐長度 (m)
+    Lb_m, Cb    : float LTB 無側撐長度 (m) 與修正因子
+    load_cases   : list of (label, Pu_kN, Mux_kNm, Muy_kNm)
+                   Pu > 0 = 拉力(T),  Pu < 0 = 壓力(C)
     """
     sec  = get_section(section_name)
     mat  = Material(Fy=Fy, Fu=Fu, E=E)
-    col  = ColumnParams.from_ft(Kx=Kx, Lx_ft=Lx_ft, Ky=Ky, Ly_ft=Ly_ft)
-    beam = BeamParams.from_ft(Lb_ft=Lb_ft, Cb=Cb)
+    col  = ColumnParams.from_m(Kx=Kx, Lx_m=Lx_m, Ky=Ky, Ly_m=Ly_m)
+    beam = BeamParams.from_m(Lb_m=Lb_m, Cb=Cb)
     bc   = BeamColumnLRFD(sec, mat, col, beam)
 
     print_member_summary(bc)
 
     cases: list[tuple[str, AppliedForces]] = [
-        (lbl, AppliedForces.from_kip_ft(Pu, Mux, Muy))
+        (lbl, AppliedForces(Pu=Pu, Mux=Mux, Muy=Muy))
         for lbl, Pu, Mux, Muy in load_cases
     ]
     print_load_cases(bc, cases)
@@ -85,90 +84,89 @@ def _ask(prompt: str, default, cast=float):
 
 
 def interactive_check() -> None:
-    print("\n" + "=" * 64)
-    print("  AISC LRFD 鋼梁柱互動式設計檢核")
-    print("  Interactive Steel Beam-Column Design Check")
-    print("=" * 64)
+    print("\n" + "=" * 66)
+    print("  AISC LRFD 鋼梁柱互動式設計檢核（公制）")
+    print("  Interactive Steel Beam-Column Design Check – Metric")
+    print("=" * 66)
 
-    # ── Section selection
+    # ── Section
     print("\n可用截面 / Available sections:")
-    secs = list_sections()
-    for i, s in enumerate(secs, 1):
-        print(f"  {i:>2}. {s}")
+    for cat in ("HW", "HN"):
+        secs = list_sections_by_category(cat)
+        print(f"  {cat}: {', '.join(secs)}")
 
-    raw = input("\n  輸入截面名稱 / Enter section name [W14x82]: ").strip()
-    sec_name = raw if raw else "W14x82"
+    raw = input("\n  輸入截面名稱 / Enter section name [H300x300x10x15]: ").strip()
+    sec_name = raw if raw else "H300x300x10x15"
 
     # ── Material
-    print("\n--- 材料參數 / Material ---")
-    Fy = _ask("Fy (ksi)", 50)
-    Fu = _ask("Fu (ksi)", 65)
-    E  = _ask("E  (ksi)", 29000)
+    print("\n--- 材料參數 / Material (MPa) ---")
+    Fy = _ask("Fy (MPa)", 355)
+    Fu = _ask("Fu (MPa)", 490)
+    E  = _ask("E  (MPa)", 200000)
 
     # ── Geometry
     print("\n--- 幾何參數 / Geometry ---")
-    Kx    = _ask("Kx (強軸有效長度因子 strong-axis K)", 1.0)
-    Lx_ft = _ask("Lx (ft, 強軸無側撐長 strong-axis unbraced length)", 15.0)
-    Ky    = _ask("Ky (弱軸有效長度因子 weak-axis K)", 1.0)
-    Ly_ft = _ask("Ly (ft, 弱軸無側撐長 weak-axis unbraced length)", 15.0)
-    Lb_ft = _ask("Lb (ft, 側扭挫屈無側撐長 LTB unbraced length)", Ly_ft)
-    Cb    = _ask("Cb (LTB 修正因子 modification factor, 1.0=保守)", 1.0)
+    Kx    = _ask("Kx (強軸有效長度因子)", 1.0)
+    Lx_m  = _ask("Lx (m, 強軸無側撐長)", 5.0)
+    Ky    = _ask("Ky (弱軸有效長度因子)", 1.0)
+    Ly_m  = _ask("Ly (m, 弱軸無側撐長)", 5.0)
+    Lb_m  = _ask("Lb (m, 側扭挫屈無側撐長)", Ly_m)
+    Cb    = _ask("Cb (LTB 修正因子, 1.0=保守)", 1.0)
 
     # ── Load cases
     print("\n--- 外力組合 / Load Cases ---")
-    print("  Pu > 0 = 拉力(Tension),  Pu < 0 = 壓力(Compression)")
-    print("  輸入空白標籤結束 / Enter blank label to finish\n")
+    print("  Pu > 0 = 拉力(T),  Pu < 0 = 壓力(C)")
+    print("  輸入空白標籤結束\n")
 
     load_cases: list[tuple[str, float, float, float]] = []
     idx = 1
     while True:
-        lbl = input(f"  載重組合 {idx} 名稱 / Label (Enter=done): ").strip()
+        lbl = input(f"  載重組合 {idx} 名稱 (Enter=結束): ").strip()
         if not lbl:
             if not load_cases:
-                print("  (使用預設載重組合 / Using default load cases)")
+                print("  (使用預設載重組合)")
                 load_cases = [
-                    ("DL+LL (案例1)",  -500.0,  180.0,  0.0),
-                    ("DL+LL (案例2)",  -300.0,  280.0,  0.0),
-                    ("DL+LL+W (案例3)", -150.0, 320.0,  0.0),
-                    ("拉力+彎矩",        200.0,  160.0,  0.0),
+                    ("1.2D+1.6L",  -2000,  300,  0),
+                    ("1.2D+1.6L+W",-1200,  420,  0),
+                    ("0.9D+1.0W",   -500,  500,  0),
+                    ("拉力組合",     800,  200,  0),
                 ]
             break
-        Pu  = _ask(f"  Pu  (kips)", -300.0)
-        Mux = _ask(f"  Mux (kip-ft, 強軸)", 200.0)
-        Muy = _ask(f"  Muy (kip-ft, 弱軸, 可為0)", 0.0)
+        Pu  = _ask("  Pu  (kN)", -1000.0)
+        Mux = _ask("  Mux (kN·m, 強軸)", 300.0)
+        Muy = _ask("  Muy (kN·m, 弱軸, 可為0)", 0.0)
         load_cases.append((lbl, Pu, Mux, Muy))
         idx += 1
 
-    do_plot = input("\n  繪製 P-M 互制圖？Plot P-M diagram? [Y/n]: ").strip().lower()
+    do_plot = input("\n  繪製 P-M 互制圖？[Y/n]: ").strip().lower()
     run_design_check(
         section_name=sec_name,
         Fy=Fy, Fu=Fu, E=E,
-        Kx=Kx, Lx_ft=Lx_ft,
-        Ky=Ky, Ly_ft=Ly_ft,
-        Lb_ft=Lb_ft, Cb=Cb,
+        Kx=Kx, Lx_m=Lx_m,
+        Ky=Ky, Ly_m=Ly_m,
+        Lb_m=Lb_m, Cb=Cb,
         load_cases=load_cases,
         plot=(do_plot != "n"),
     )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Preset example (run without interaction)
+# Preset example – H300×300×10×15, Fy=355 MPa, KL=5 m
 # ─────────────────────────────────────────────────────────────────────────────
 
 def run_example(plot: bool = True) -> None:
-    """Demonstrate programmatic API with W14x82 example."""
     run_design_check(
-        section_name = "W14x82",
-        Fy=50, Fu=65, E=29000,
-        Kx=1.0, Lx_ft=15.0,
-        Ky=1.0, Ly_ft=15.0,
-        Lb_ft=10.0, Cb=1.0,
+        section_name = "H300x300x10x15",
+        Fy=355, Fu=490, E=200_000,
+        Kx=1.0, Lx_m=5.0,
+        Ky=1.0, Ly_m=5.0,
+        Lb_m=3.0, Cb=1.0,
         load_cases=[
-            # (label,          Pu kips,  Mux kip-ft,  Muy kip-ft)
-            ("1.2D+1.6L (壓+彎)", -500,     208.3,        0.0),
-            ("1.2D+1.6L+W",       -300,     291.7,        0.0),
-            ("0.9D+1.0W",         -100,     316.7,        0.0),
-            ("拉力組合",           +200,     166.7,        0.0),
+            # (label,       Pu kN,  Mux kN·m,  Muy kN·m)
+            ("1.2D+1.6L",  -2000,    280,        0),
+            ("1.2D+1.6L+W",-1200,    420,        0),
+            ("0.9D+1.0W",   -500,    500,        0),
+            ("拉力組合",      800,    200,        0),
         ],
         plot=plot,
     )
@@ -178,7 +176,6 @@ def run_example(plot: bool = True) -> None:
 
 if __name__ == "__main__":
     import sys
-
     if "--example" in sys.argv:
         run_example(plot="--no-plot" not in sys.argv)
     else:
