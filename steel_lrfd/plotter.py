@@ -5,11 +5,11 @@ Plots the axial force – moment interaction envelope per AISC 360-16 H1-1,
 showing both the **nominal** curve (without φ) and the **design** curve
 (with φ) on the same figure, plus any applied load points.
 
-Conventions
------------
-  P < 0  →  compression   (下方)
-  P > 0  →  tension       (上方)
-  M ≥ 0  →  moment magnitude  (右方)
+Display convention (Y-axis flipped for engineering intuition)
+-------------------------------------------------------------
+  Y > 0  →  compression   (上方 top)
+  Y < 0  →  tension       (下方 bottom)
+  X ≥ 0  →  moment magnitude
 """
 
 from __future__ import annotations
@@ -62,6 +62,12 @@ C_FAIL  = "#D84315"   # orange-red – load point that fails
 C_ZONE  = "#757575"   # grey   – zone boundary line
 
 
+# ── helper: flip P sign for display (compression → positive/top) ─────────────
+def _flip(P_arr):
+    """Negate P values so compression (P<0 internally) plots at top (Y>0)."""
+    return -np.asarray(P_arr)
+
+
 # ── main entry point ────────────────────────────────────────────────────────
 
 def plot_pm_diagram(
@@ -87,20 +93,21 @@ def plot_pm_diagram(
     save_path   : file path to save figure (None → don't save)
     show        : whether to call plt.show()
     """
-    # ── build curve arrays (kip-ft for moment) ──────────────────────────────
-    P_nom, M_nom_in = bc.interaction_curve(n_pts=n_pts, with_phi=False)
-    P_des, M_des_in = bc.interaction_curve(n_pts=n_pts, with_phi=True)
+    # ── build curve arrays (kN·m for moment, kN for force) ──────────────────
+    P_nom_raw, M_nom_raw = bc.interaction_curve(n_pts=n_pts, with_phi=False)
+    P_des_raw, M_des_raw = bc.interaction_curve(n_pts=n_pts, with_phi=True)
 
-    P_nom = np.array(P_nom);  M_nom = np.array(M_nom_in) / 12.0
-    P_des = np.array(P_des);  M_des = np.array(M_des_in) / 12.0
+    # Flip P sign for display: compression (negative) → positive (top)
+    P_nom = _flip(P_nom_raw);  M_nom = np.array(M_nom_raw)
+    P_des = _flip(P_des_raw);  M_des = np.array(M_des_raw)
 
-    # key anchor values (kip-ft)
-    phi_cPn  = bc.compression.phi_Pn
-    phi_tPnt = bc.tension.phi_Pnt
-    phi_Mnx  = bc.flexure_x.phi_Mn  / 12.0
-    Pn       = bc.compression.Pn
-    Pnt      = bc.tension.Pnt
-    Mnx      = bc.flexure_x.Mn      / 12.0
+    # key anchor values (kN / kN·m) — kept in internal sign; flip when plotting
+    phi_cPn  = bc.compression.phi_Pn    # kN  (positive magnitude)
+    phi_tPnt = bc.tension.phi_Pnt       # kN  (positive magnitude)
+    phi_Mnx  = bc.flexure_x.phi_Mn     # kN·m
+    Pn       = bc.compression.Pn       # kN
+    Pnt      = bc.tension.Pnt          # kN
+    Mnx      = bc.flexure_x.Mn         # kN·m
 
     # ── evaluate load-case results ───────────────────────────────────────────
     results: list[tuple[str, AppliedForces, InteractionResult]] = []
@@ -119,10 +126,10 @@ def plot_pm_diagram(
     beam = bc.beam
     col  = bc.col
     fig.suptitle(
-        f"AISC 360-16 LRFD  軸力–彎矩互制圖  /  P-M Interaction Diagram\n"
-        f"{sec.name}   Fy = {mat.Fy} ksi   "
-        f"KL = {col.KyLy/12:.1f} ft   "
-        f"Lb = {beam.Lb/12:.1f} ft   "
+        f"AISC 360-16 LRFD  軸力-彎矩互制圖  /  P-M Interaction Diagram\n"
+        f"{sec.name}   Fy = {mat.Fy} MPa   "
+        f"KL = {col.KyLy/1000:.1f} m   "
+        f"Lb = {beam.Lb/1000:.1f} m   "
         f"Cb = {beam.Cb:.2f}",
         fontsize=12, fontweight="bold", y=0.98,
     )
@@ -177,24 +184,28 @@ def _draw_left(ax, P_nom, M_nom, P_des, M_des,
     # curves
     ax.plot(M_nom, P_nom, color=C_NOM, lw=2.2, ls="--", zorder=3,
             label=f"標稱強度 (Nominal, no φ)\n"
-                  f"  Pn = {Pn:.0f} k,  Mn = {Mnx:.0f} k-ft")
+                  f"  Pn = {Pn:.0f} kN,  Mn = {Mnx:.0f} kN·m")
     ax.plot(M_des, P_des, color=C_DES, lw=2.5, zorder=3,
             label=f"設計強度 (Design, with φ)\n"
-                  f"  φPn = {phi_cPn:.0f} k,  φMn = {phi_Mnx:.0f} k-ft")
+                  f"  φPn = {phi_cPn:.0f} kN,  φMn = {phi_Mnx:.0f} kN·m")
 
     # anchor point labels
-    _annotate(ax, 0, -phi_cPn, f"φcPn\n{phi_cPn:.0f} k",
+    # compression apex: internally P = -phi_cPn → displayed as +phi_cPn (top)
+    _annotate(ax, 0,  phi_cPn, f"φcPn\n{phi_cPn:.0f} kN",
               C_DES, dx=phi_Mnx*0.12, dy=phi_cPn*0.08)
-    _annotate(ax, 0, -Pn,       f"Pn\n{Pn:.0f} k",
+    _annotate(ax, 0,  Pn,      f"Pn\n{Pn:.0f} kN",
               C_NOM, dx=phi_Mnx*0.12, dy=-Pn*0.08)
-    _annotate(ax, phi_Mnx, 0,  f"φMnx\n{phi_Mnx:.0f} k-ft",
+    # tension apex: internally P = +phi_tPnt → displayed as -phi_tPnt (bottom)
+    _annotate(ax, 0, -phi_tPnt, f"φtPnt\n{phi_tPnt:.0f} kN",
+              C_DES, dx=phi_Mnx*0.12, dy=-phi_tPnt*0.08)
+    _annotate(ax, phi_Mnx, 0,  f"φMnx\n{phi_Mnx:.0f} kN·m",
               C_DES, dx=0, dy=phi_cPn*0.12)
-    _annotate(ax, Mnx, 0,      f"Mnx\n{Mnx:.0f} k-ft",
+    _annotate(ax, Mnx, 0,      f"Mnx\n{Mnx:.0f} kN·m",
               C_NOM, dx=0, dy=-phi_cPn*0.12)
 
-    # load points
+    # load points — flip Pu sign for display
     for lbl, f, r in results:
-        _plot_point(ax, abs(f.Mux)/12, f.Pu, lbl, r.passes, r.IR)
+        _plot_point(ax, abs(f.Mux), -f.Pu, lbl, r.passes, r.IR)
 
     _finish_axes(ax,
                  title="① 標稱 vs 設計強度包絡線\n   Nominal vs Design Envelope",
@@ -213,30 +224,32 @@ def _draw_right(ax, P_des, M_des,
     ax.plot(M_des, P_des, color=C_DES, lw=2.5, zorder=3,
             label="設計強度包絡線 / Design envelope")
 
-    # ── H1-1a / H1-1b boundary line at |P|/φcPn = 0.20 ─────────────────────
-    P_boundary = -0.20 * phi_cPn          # compression side  (P < 0)
-    P_boundary_t = 0.20 * phi_tPnt        # tension side
+    # ── H1-1a / H1-1b boundary lines ─────────────────────────────────────────
+    # Compression boundary: |Pu|/φcPn = 0.20 → displayed Y = +0.20*phi_cPn
+    P_boundary_c =  0.20 * phi_cPn
+    # Tension boundary: displayed Y = -0.20*phi_tPnt
+    P_boundary_t = -0.20 * phi_tPnt
     x_max = M_des.max() * 1.05
 
-    ax.axhline(P_boundary,   color=C_ZONE, lw=1.2, ls=":",  zorder=2)
+    ax.axhline(P_boundary_c, color=C_ZONE, lw=1.2, ls=":",  zorder=2)
     ax.axhline(P_boundary_t, color=C_ZONE, lw=1.2, ls=":",  zorder=2)
 
-    ax.text(x_max * 0.55, P_boundary * 1.10,
-            "H1-1a  |Pu/φcPn| ≥ 0.20",
+    ax.text(x_max * 0.55, P_boundary_c * 1.10,
+            "H1-1a  |Pu/φcPn| >= 0.20",
             fontsize=7.5, color=C_ZONE, va="center")
-    ax.text(x_max * 0.55, (P_boundary + P_boundary_t) * 0.5 - phi_cPn*0.04,
-            "H1-1b  |Pu/φcPn| < 0.20",
+    ax.text(x_max * 0.55, (P_boundary_c + P_boundary_t) * 0.5,
+            "H1-1b  |Pu/φPn| < 0.20",
             fontsize=7.5, color=C_ZONE, va="center")
     ax.text(x_max * 0.55, P_boundary_t * 1.10,
-            "H1-1a  |Pu/φtPnt| ≥ 0.20",
+            "H1-1a  |Pu/φtPnt| >= 0.20",
             fontsize=7.5, color=C_ZONE, va="center")
 
     # ── key anchor annotations ────────────────────────────────────────────────
-    _annotate(ax, 0, -phi_cPn, f"φcPn\n{phi_cPn:.0f} k",
+    _annotate(ax, 0,  phi_cPn, f"φcPn\n{phi_cPn:.0f} kN",
               C_DES, dx=phi_Mnx*0.15, dy=phi_cPn*0.06)
-    _annotate(ax, 0,  phi_tPnt, f"φtPnt\n{phi_tPnt:.0f} k",
+    _annotate(ax, 0, -phi_tPnt, f"φtPnt\n{phi_tPnt:.0f} kN",
               C_DES, dx=phi_Mnx*0.15, dy=-phi_tPnt*0.06)
-    _annotate(ax, phi_Mnx, 0,  f"φMnx\n{phi_Mnx:.0f} k-ft",
+    _annotate(ax, phi_Mnx, 0,  f"φMnx\n{phi_Mnx:.0f} kN·m",
               C_DES, dx=0, dy=phi_cPn*0.10)
 
     # ── load points ───────────────────────────────────────────────────────────
@@ -244,13 +257,14 @@ def _draw_right(ax, P_des, M_des,
     for i, (lbl, f, r) in enumerate(results):
         col = C_PASS if r.passes else C_FAIL
         marker = "D" if i == 0 else "o"
-        ax.scatter(abs(f.Mux)/12, f.Pu,
+        # flip Pu sign: compression (f.Pu < 0) → display positive (top)
+        P_display = -f.Pu
+        ax.scatter(abs(f.Mux), P_display,
                    color=col, s=110, marker=marker,
                    edgecolors="white", lw=1.0, zorder=5)
-        # small IR label beside each point
         ax.annotate(
             f" {lbl}\n IR={r.IR:.3f} {'OK' if r.passes else 'NG'}",
-            xy=(abs(f.Mux)/12, f.Pu),
+            xy=(abs(f.Mux), P_display),
             fontsize=7.5, color=col,
             xytext=(6, 4), textcoords="offset points",
         )
@@ -285,12 +299,12 @@ def _annotate(ax, x, y, text, color, dx=0, dy=0):
     )
 
 
-def _plot_point(ax, Mx, Pu, label, passes, IR):
+def _plot_point(ax, Mx, Pu_display, label, passes, IR):
     col = C_PASS if passes else C_FAIL
-    ax.scatter(Mx, Pu, color=col, s=90, zorder=5,
+    ax.scatter(Mx, Pu_display, color=col, s=90, zorder=5,
                edgecolors="white", lw=0.8)
     ax.annotate(f" {label}\n IR={IR:.3f}",
-                xy=(Mx, Pu), fontsize=7, color=col,
+                xy=(Mx, Pu_display), fontsize=7, color=col,
                 xytext=(5, 3), textcoords="offset points")
 
 
@@ -306,7 +320,7 @@ def _finish_axes(ax, title, M_max, P_min, P_max, legend=True):
     ax.set_ylim(P_min - pad_y, P_max + pad_y)
 
     ax.set_xlabel("彎矩 Mu  (kN·m)", fontsize=10)
-    ax.set_ylabel("軸力 Pu  (kN)\n← 壓力 C            拉力 T →", fontsize=10)
+    ax.set_ylabel("軸力 Pu  (kN)\n壓力 C (↑)            拉力 T (↓)", fontsize=10)
     ax.set_title(title, fontsize=9.5, pad=8)
     ax.grid(True, alpha=0.25, lw=0.6)
     ax.xaxis.set_minor_locator(ticker.AutoMinorLocator())
