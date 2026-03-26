@@ -45,7 +45,11 @@ def _setup_cjk_font() -> None:
 
 
 _setup_cjk_font()
-plt.rcParams["axes.unicode_minus"] = False   # avoid Unicode minus glyph warning
+plt.rcParams["axes.unicode_minus"] = False
+
+# Detect headless environment (Codespaces, SSH, CI …)
+import os as _os
+_HEADLESS = not _os.environ.get("DISPLAY") and _os.environ.get("TERM_PROGRAM") != "vscode-terminal"
 
 
 # ── colour palette ──────────────────────────────────────────────────────────
@@ -136,12 +140,22 @@ def plot_pm_diagram(
                 phi_cPn, phi_tPnt, phi_Mnx, results)
 
     # ── save & show ──────────────────────────────────────────────────────────
-    if save_path:
-        fig.savefig(save_path, dpi=150, bbox_inches="tight")
-        print(f"  圖形已儲存 / Figure saved → {save_path}")
+    # Always save to PNG so it can be opened in VS Code / Codespaces
+    out = save_path or "PM_interaction_diagram.png"
+    fig.savefig(out, dpi=150, bbox_inches="tight")
+    print(f"\n  圖形已儲存 / Figure saved → {out}")
 
-    if show:
+    if show and not _HEADLESS:
         plt.show()
+    else:
+        # Headless (Codespaces / SSH): open the PNG directly in VS Code
+        _path = _os.path.abspath(out)
+        print(f"  請在 VS Code 中開啟圖檔 / Open in VS Code:")
+        print(f"    code \"{_path}\"")
+        # Try to trigger VS Code's built-in image viewer automatically
+        if _os.system(f'code "{_path}" 2>/dev/null') != 0:
+            print(f"  (或手動點擊左側 Explorer 中的 {_os.path.basename(out)})")
+        plt.close(fig)
 
     return fig
 
