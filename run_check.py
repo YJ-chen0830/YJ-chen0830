@@ -21,7 +21,7 @@ from __future__ import annotations
 from steel_lrfd import (
     get_section, list_sections, list_sections_by_category,
     Material, ColumnParams, BeamParams, AppliedForces,
-    BeamColumnLRFD, plot_pm_diagram,
+    BeamColumnLRFD, plot_pm_diagram, generate_html_report,
 )
 from steel_lrfd.reporter import print_member_summary, print_load_cases
 
@@ -72,6 +72,8 @@ def run_design_check(
 
     if plot:
         plot_pm_diagram(bc, cases, save_path=save_path, show=True)
+
+    return bc, cases
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -164,8 +166,10 @@ def interactive_check() -> None:
             Muy = _ask("  Muy (kN·m, 弱軸)", 0.0)
             load_cases.append((lbl, Pu, Mux, Muy))
 
-    do_plot = input("\n  繪製 P-M 互制圖？[Y/n]: ").strip().lower()
-    run_design_check(
+    do_plot   = input("\n  繪製 P-M 互制圖？[Y/n]: ").strip().lower()
+    do_report = input("  輸出 HTML 計算書？[Y/n]: ").strip().lower()
+
+    result = run_design_check(
         section_name=sec_name,
         Fy=Fy, Fu=Fu, E=E,
         Kx=Kx, Lx_m=Lx_m,
@@ -174,6 +178,14 @@ def interactive_check() -> None:
         load_cases=load_cases,
         plot=(do_plot != "n"),
     )
+
+    if do_report != "n" and result:
+        bc, cases = result
+        diagram_path = "PM_interaction_diagram.png"
+        if do_plot == "n":
+            # silently generate diagram for embedding
+            plot_pm_diagram(bc, cases, save_path=diagram_path, show=False)
+        generate_html_report(bc, cases, diagram_png=diagram_path)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -202,8 +214,20 @@ def run_example(plot: bool = True) -> None:
 
 if __name__ == "__main__":
     import sys
-    if "--example" in sys.argv:
-        run_example(plot="--no-plot" not in sys.argv)
+    args = sys.argv[1:]
+    do_example = "--example" in args
+    do_plot    = "--no-plot" not in args
+    do_report  = "--report"  in args
+
+    if do_example:
+        result = run_example(plot=do_plot)
+        if do_report and result:
+            bc, cases = result
+            diagram_path = "PM_interaction_diagram.png"
+            if not do_plot:
+                # generate diagram silently for embedding in report
+                plot_pm_diagram(bc, cases, save_path=diagram_path, show=False)
+            generate_html_report(bc, cases, diagram_png=diagram_path)
     else:
         try:
             interactive_check()

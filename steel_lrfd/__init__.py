@@ -2,6 +2,7 @@
 
 from .sections_db import HSection, H_SECTIONS, get_section, list_sections, list_sections_by_category
 from .plotter import plot_pm_diagram
+from .calc_report import generate_html_report
 from .core import (
     Material,
     ColumnParams,
@@ -16,7 +17,7 @@ from .core import (
 
 __all__ = [
     "HSection", "H_SECTIONS", "get_section", "list_sections", "list_sections_by_category",
-    "plot_pm_diagram",
+    "plot_pm_diagram", "generate_html_report",
     "Material", "ColumnParams", "BeamParams", "AppliedForces",
     "CompressionResult", "TensionResult", "FlexureResult", "InteractionResult",
     "BeamColumnLRFD",
