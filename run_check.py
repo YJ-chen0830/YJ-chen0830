@@ -79,7 +79,21 @@ def run_design_check(
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _ask(prompt: str, default, cast=float):
-    raw = input(f"  {prompt} [{default}]: ").strip()
+    """輸入框預填預設值，可直接修改後 Enter。"""
+    default_str = str(default)
+    try:
+        import readline
+        def _prefill():
+            readline.insert_text(default_str)
+            readline.redisplay()
+        readline.set_pre_input_hook(_prefill)
+        try:
+            raw = input(f"  {prompt}: ").strip()
+        finally:
+            readline.set_pre_input_hook(None)
+    except (ImportError, AttributeError):
+        # readline 不可用（Windows / 某些環境）→ 顯示 [預設] 提示
+        raw = input(f"  {prompt} [{default_str}]: ").strip()
     return cast(raw) if raw else cast(default)
 
 
@@ -95,8 +109,7 @@ def interactive_check() -> None:
         secs = list_sections_by_category(cat)
         print(f"  {cat}: {', '.join(secs)}")
 
-    raw = input("\n  輸入截面名稱 / Enter section name [H300x300x10x15]: ").strip()
-    sec_name = raw if raw else "H300x300x10x15"
+    sec_name = _ask("輸入截面名稱 / Enter section name", "H300x300x10x15", cast=str)
 
     # ── Material
     print("\n--- 材料參數 / Material (MPa) ---")
@@ -116,27 +129,40 @@ def interactive_check() -> None:
     # ── Load cases
     print("\n--- 外力組合 / Load Cases ---")
     print("  Pu > 0 = 拉力(T),  Pu < 0 = 壓力(C)")
-    print("  輸入空白標籤結束\n")
+    print("  預設載重組合 / Default cases (Enter=直接接受, 或自行輸入):")
+    _DEFAULTS = [
+        ("1.2D+1.6L",   -2000.0,  300.0,  0.0),
+        ("1.2D+1.6L+W", -1200.0,  420.0,  0.0),
+        ("0.9D+1.0W",    -500.0,  500.0,  0.0),
+        ("拉力組合",       800.0,  200.0,  0.0),
+    ]
+    for i, (lbl, pu, mux, muy) in enumerate(_DEFAULTS, 1):
+        print(f"    {i}. {lbl:15s}  Pu={pu:7.0f} kN  Mux={mux:6.0f} kN·m  Muy={muy:.0f} kN·m")
+    print("  (標籤留空則直接採用上列預設值並結束輸入)\n")
 
     load_cases: list[tuple[str, float, float, float]] = []
-    idx = 1
-    while True:
-        lbl = input(f"  載重組合 {idx} 名稱 (Enter=結束): ").strip()
+    for idx, (def_lbl, def_pu, def_mux, def_muy) in enumerate(_DEFAULTS, 1):
+        lbl = _ask(f"載重組合 {idx} 名稱 (Enter=結束輸入)", def_lbl, cast=str)
         if not lbl:
+            # 使用者中途結束 → 保留已輸入的，其餘用預設補齊
             if not load_cases:
-                print("  (使用預設載重組合)")
-                load_cases = [
-                    ("1.2D+1.6L",  -2000,  300,  0),
-                    ("1.2D+1.6L+W",-1200,  420,  0),
-                    ("0.9D+1.0W",   -500,  500,  0),
-                    ("拉力組合",     800,  200,  0),
-                ]
+                print("  (採用全部預設載重組合)")
+                load_cases = list(_DEFAULTS)
             break
-        Pu  = _ask("  Pu  (kN)", -1000.0)
-        Mux = _ask("  Mux (kN·m, 強軸)", 300.0)
-        Muy = _ask("  Muy (kN·m, 弱軸, 可為0)", 0.0)
+        Pu  = _ask(f"  Pu  (kN)", def_pu)
+        Mux = _ask(f"  Mux (kN·m, 強軸)", def_mux)
+        Muy = _ask(f"  Muy (kN·m, 弱軸)", def_muy)
         load_cases.append((lbl, Pu, Mux, Muy))
-        idx += 1
+    else:
+        # 全部 4 組都輸入完畢，詢問是否繼續新增
+        while True:
+            lbl = _ask(f"載重組合 {len(load_cases)+1} 名稱 (Enter=結束)", "", cast=str)
+            if not lbl:
+                break
+            Pu  = _ask("  Pu  (kN)", -1000.0)
+            Mux = _ask("  Mux (kN·m, 強軸)", 300.0)
+            Muy = _ask("  Muy (kN·m, 弱軸)", 0.0)
+            load_cases.append((lbl, Pu, Mux, Muy))
 
     do_plot = input("\n  繪製 P-M 互制圖？[Y/n]: ").strip().lower()
     run_design_check(
